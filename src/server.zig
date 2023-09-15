@@ -11,6 +11,7 @@ pub const ServerFirst = struct {
         var split = std.mem.splitScalar(u8, server_first, ',');
 
         const first = split.first();
+        std.debug.print("{}\n", first);
         var first_kv = std.mem.splitScalar(u8, first, '=');
 
         var reserved_mext: ?[]const u8 = null;
@@ -43,8 +44,8 @@ pub const ServerFirst = struct {
         const raw_iteration_count = third_kv.next() orelse return error.MissingIterationCountValue;
         const iteration_count = try std.fmt.parseInt(u16, raw_iteration_count, 10);
 
-        const extensions: [][]const u8 = if (split.next()) |e| blk: {
-            break :blk &.{e};
+        const extensions = if (split.next()) |e| blk: {
+            break :blk [1][]const u8{e};
         } else null;
 
         return .{
@@ -64,5 +65,5 @@ test "ServerFirst should deserialize correctly" {
         .iteration_count = 0,
     };
     const result = try ServerFirst.deserialize("r=9IZ2O01zb9IgiIZ1WJ/zgpJBjx/oIRLs02gGSHcw1KEty3eY,s=fs3IXBy7U7+IvVjZ,i=4096");
-    std.testing.expectEqual(expected, result);
+    try std.testing.expectEqual(expected, result);
 }
