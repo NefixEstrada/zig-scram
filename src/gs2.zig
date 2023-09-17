@@ -1,16 +1,17 @@
 const std = @import("std");
+const common = @import("common.zig");
 
 pub const Header = struct {
     nonstd_flag: bool = false,
     cbind_flag: CbindFlag,
-    authzid: ?Authzid = null,
+    authzid: ?[]const u8 = null,
 
     pub fn serialize(self: Header, alloc: std.mem.Allocator) ![]const u8 {
         const cbind_flag = try self.cbind_flag.serialize(alloc);
         defer alloc.free(cbind_flag);
 
         const authzid = if (self.authzid) |a| blk: {
-            break :blk try a.serialize(alloc);
+            break :blk try encodeName(alloc, a);
         } else "";
         defer alloc.free(authzid);
 
@@ -18,9 +19,33 @@ pub const Header = struct {
             if (self.nonstd_flag) "F," else "",
             cbind_flag,
             ",",
-            authzid,
+            if (self.authzid) |_| "a=" else "",
+            if (self.authzid) |_| authzid else "",
             ",",
         });
+    }
+
+    pub fn deserialize(parts: *std.mem.SplitIterator(u8, .scalar)) !Header {
+        // Non standard flag
+        var part = parts.next();
+        if (part == null) return error.HeaderInvalid;
+        const nonstd_flag = if (std.mem.eql(u8, part.?, "F")) true else false;
+
+        // Channel bind flag
+        part = if (nonstd_flag) parts.next() else part;
+        if (part == null) return error.HeaderInvalid;
+        const cbind_flag = try CbindFlag.deserialize(part.?);
+
+        // Authz ID
+        part = parts.next();
+        if (part == null) return error.HeaderInvalid;
+        const authzid = common.deserializeOptionalPart("a", part) catch return error.HeaderInvalid;
+
+        return Header{
+            .nonstd_flag = nonstd_flag,
+            .cbind_flag = cbind_flag,
+            .authzid = authzid,
+        };
     }
 };
 
@@ -29,30 +54,36 @@ test "Header should serialize correctly" {
 
     var h = Header{
         .cbind_flag = .{
-            .value = .{
-                .N = {},
-            },
+            .N = {},
         },
     };
     const result1 = try h.serialize(alloc);
     defer alloc.free(result1);
     try std.testing.expectEqualStrings("n,,", result1);
 
-    h.authzid = .{ .value = "hello" };
+    h.authzid = "hello";
     const result2 = try h.serialize(alloc);
     defer alloc.free(result2);
     try std.testing.expectEqualStrings("n,a=hello,", result2);
 }
 
-pub const CbindFlag = struct {
-    value: union(enum) {
-        P: []const u8,
-        N: void,
-        Y: void,
-    },
+test "Header should deserialize correctly" {
+    var parts = std.mem.splitScalar(u8, "n,a=hello,", ',');
+    var header = try Header.deserialize(&parts);
+
+    try std.testing.expectEqualDeep(Header{
+        .cbind_flag = .{ .N = {} },
+        .authzid = "hello",
+    }, header);
+}
+
+pub const CbindFlag = union(enum) {
+    P: []const u8,
+    N: void,
+    Y: void,
 
     pub fn serialize(self: CbindFlag, alloc: std.mem.Allocator) ![]const u8 {
-        switch (self.value) {
+        switch (self) {
             .P => |p| {
                 const name = try encodeName(alloc, p);
                 defer alloc.free(name);
@@ -63,45 +94,57 @@ pub const CbindFlag = struct {
             .Y => return try alloc.dupe(u8, "y"),
         }
     }
+
+    pub fn deserialize(msg: []const u8) !CbindFlag {
+        switch (msg.len) {
+            0 => return error.CbindInvalid,
+            1 => {
+                switch (msg[0]) {
+                    'n' => return .{ .N = {} },
+                    'y' => return .{ .Y = {} },
+                    else => return error.CbindFlagInvalid,
+                }
+            },
+            else => {
+                var parts = std.mem.splitScalar(u8, msg, '=');
+                if (!std.mem.eql(u8, parts.first(), "p")) return error.CbindFlagInvalid;
+
+                const name = parts.next();
+                if (name == null) return error.CbindFlagInvalid;
+
+                if (parts.peek() != null) return error.CbindFlagInvalid;
+
+                return .{ .P = name.? };
+            },
+        }
+    }
 };
 
 test "CbindFlag should serialize correctly" {
     const alloc = std.testing.allocator;
 
-    var c = CbindFlag{ .value = .{ .P = "hello" } };
+    var c = CbindFlag{ .P = "hello" };
 
     const result1 = try c.serialize(alloc);
     defer alloc.free(result1);
     try std.testing.expectEqualStrings("p=hello", result1);
 
-    c.value = .{ .N = {} };
+    c = .{ .N = {} };
     const result2 = try c.serialize(alloc);
     defer alloc.free(result2);
     try std.testing.expectEqualStrings("n", result2);
 
-    c.value = .{ .Y = {} };
+    c = .{ .Y = {} };
     const result3 = try c.serialize(alloc);
     defer alloc.free(result3);
     try std.testing.expectEqualStrings("y", result3);
 }
 
-pub const Authzid = struct {
-    value: []const u8,
-
-    pub fn serialize(self: Authzid, alloc: std.mem.Allocator) ![]const u8 {
-        const value = try encodeName(alloc, self.value);
-        defer alloc.free(value);
-
-        return try std.mem.concat(alloc, u8, &.{ "a=", value });
-    }
-};
-
-test "Authzid should get serialize correctly" {
-    const a = Authzid{ .value = "hello" };
-    const result = try a.serialize(std.testing.allocator);
-    defer std.testing.allocator.free(result);
-
-    try std.testing.expectEqualStrings("a=hello", result);
+test "CbindFlag should deserialize correctly" {
+    try std.testing.expectEqual(CbindFlag{ .N = {} }, try CbindFlag.deserialize("n"));
+    try std.testing.expectEqual(CbindFlag{ .Y = {} }, try CbindFlag.deserialize("y"));
+    try std.testing.expectEqualDeep(CbindFlag{ .P = "hello" }, try CbindFlag.deserialize("p=hello"));
+    try std.testing.expectError(error.CbindFlagInvalid, CbindFlag.deserialize("p=hello=my=friend:D"));
 }
 
 pub fn encodeName(alloc: std.mem.Allocator, name: []const u8) ![]const u8 {
