@@ -10,6 +10,7 @@ Based on [https://github.com/xdg-go/scram](https://github.com/xdg-go/scram) and 
 
 ## TODO before first release
 - Rename allocator -> alloc
+- Namespace thing
 - State machine + step
 - Refactor everything with allocators on the functions, not on the structs
 - Make the nonce generator functions, not arguments when calling the functions

@@ -18,7 +18,7 @@ test "Test both client and server" {
         }
     }.creds;
 
-    var s = try server.Server(std.crypto.hash.Sha1, credsLookup).init(alloc, "3rfcNHYJY1ZVvWVs7j");
+    var s = try server.ServerSha1(credsLookup).init(alloc, "3rfcNHYJY1ZVvWVs7j");
     defer s.deinit();
 
     var c = try client.ClientSha1.init(alloc, "user", "pencil", "fyko+d2lbbFgONRv9qkxdawL");

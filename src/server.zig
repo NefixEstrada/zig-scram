@@ -12,6 +12,18 @@ pub const Credentials = struct {
     server_key: []const u8,
 };
 
+pub fn ServerSha1(comptime lookup: CredentialsLookup) type {
+    return Server(std.crypto.hash.Sha1, lookup);
+}
+
+pub fn ServerSha256(comptime lookup: CredentialsLookup) type {
+    return Server(std.crypto.hash.sha2.Sha256, lookup);
+}
+
+pub fn ServerSha512(comptime lookup: CredentialsLookup) type {
+    return Server(std.crypto.hash.sha3.Sha3_512, lookup);
+}
+
 pub fn Server(comptime Hash: type, comptime lookup: CredentialsLookup) type {
     const Hmac = std.crypto.auth.hmac.Hmac(Hash);
 
@@ -69,7 +81,7 @@ pub fn Server(comptime Hash: type, comptime lookup: CredentialsLookup) type {
             defer client_final.deinit(self.alloc);
 
             if (!std.mem.eql(u8, client_final.nonce, self.nonce)) {
-                self.err = .@"other-error";
+                self.err = error.@"other-error";
                 const err = ServerFinal{ .err = self.err.? };
                 return try err.serialize(self.alloc);
             }
@@ -100,7 +112,7 @@ pub fn Server(comptime Hash: type, comptime lookup: CredentialsLookup) type {
             Hash.hash(client_key, &stored_key, .{});
 
             if (!std.mem.eql(u8, &stored_key, self.credentials.?.stored_key)) {
-                self.err = .@"invalid-proof";
+                self.err = error.@"invalid-proof";
                 const err = ServerFinal{ .err = self.err.? };
                 return try err.serialize(self.alloc);
             }
@@ -112,7 +124,7 @@ pub fn Server(comptime Hash: type, comptime lookup: CredentialsLookup) type {
         }
 
         pub fn verify(self: *Self) !void {
-            if (self.err) |_| @panic("AAAAAAAA");
+            return self.err orelse {};
         }
     };
 }
@@ -132,7 +144,7 @@ test "Server should send the server first message correctly" {
         }
     }.creds;
 
-    var s = try Server(std.crypto.hash.Sha1, credsLookup).init(allocator, "c12b3985bbd4a8e6f814b422ab766573");
+    var s = try ServerSha1(credsLookup).init(allocator, "c12b3985bbd4a8e6f814b422ab766573");
     defer s.deinit();
 
     const result = try s.serverFirst("n,,n=romeo,r=6d442b5d9e51a740f369e3dcecf3178e");
@@ -155,7 +167,7 @@ test "Server should send the server final message correctly" {
         }
     }.creds;
 
-    var s = try Server(std.crypto.hash.Sha1, credsLookup).init(allocator, "3rfcNHYJY1ZVvWVs7j");
+    var s = try ServerSha1(credsLookup).init(allocator, "3rfcNHYJY1ZVvWVs7j");
     defer s.deinit();
 
     // Taken from https://wiki.xmpp.org/web/SASL_Authentication_and_SCRAM
@@ -278,7 +290,7 @@ test "ServerFirst should deserialize correctly" {
     try std.testing.expectEqualDeep(expected, result);
 }
 
-pub const ServerError = enum {
+pub const ServerError = error{
     @"invalid-encoding",
     @"extensions-not-supported",
     @"invalid-proof",
@@ -293,6 +305,20 @@ pub const ServerError = enum {
     @"server-error-value-ext",
 };
 
+// copied from std.meta.stringToEnum, adapted for error unions
+pub fn stringToServerError(err: []const u8) ?ServerError {
+    const kvs = comptime build_kvs: {
+        const ErrorKV = struct { []const u8, ServerError };
+        var kvs_array: [@typeInfo(ServerError).ErrorSet.?.len]ErrorKV = undefined;
+        inline for (@typeInfo(ServerError).ErrorSet.?, 0..) |errField, i| {
+            kvs_array[i] = .{ errField.name, @field(ServerError, errField.name) };
+        }
+        break :build_kvs kvs_array[0..];
+    };
+    const map = std.ComptimeStringMap(ServerError, kvs);
+    return map.get(err);
+}
+
 // TODO: Extensions
 pub const ServerFinal = union(enum) {
     const base64Encoder = std.base64.standard.Encoder;
@@ -301,8 +327,11 @@ pub const ServerFinal = union(enum) {
     err: ServerError,
     signature: []const u8,
 
-    pub fn deinit(self: *ServerFinal, alloc: std.mem.Allocator) void {
-        alloc.free(self.signature);
+    pub fn deinit(self: ServerFinal, alloc: std.mem.Allocator) void {
+        switch (self) {
+            .signature => |s| alloc.free(s),
+            else => {},
+        }
     }
 
     pub fn serialize(self: ServerFinal, alloc: std.mem.Allocator) ![]const u8 {
@@ -310,7 +339,7 @@ pub const ServerFinal = union(enum) {
             .err => |e| {
                 return try std.mem.concat(alloc, u8, &.{
                     "e=",
-                    @tagName(e),
+                    @errorName(e),
                 });
             },
             .signature => |s| {
@@ -332,8 +361,8 @@ pub const ServerFinal = union(enum) {
         // Error
         var part: []const u8 = parts.first();
         const err = common.deserializeOptionalPart("e", part) catch return error.ServerFinalInvalid;
-        if (err) |_| return ServerFinal{
-            .err = .@"no-resources",
+        if (err) |e| return ServerFinal{
+            .err = stringToServerError(e) orelse return error.ServerFinalUnknownError,
         };
 
         // Signature
@@ -349,7 +378,7 @@ pub const ServerFinal = union(enum) {
 test "ServerFinal should serialize correctly" {
     var alloc = std.testing.allocator;
 
-    var err = ServerFinal{ .err = .@"other-error" };
+    var err = ServerFinal{ .err = error.@"other-error" };
     const err_result = try err.serialize(alloc);
     defer alloc.free(err_result);
 
@@ -360,4 +389,18 @@ test "ServerFinal should serialize correctly" {
     defer alloc.free(verifier_result);
 
     try std.testing.expectEqualStrings("v=aG9saSA6KSEh", verifier_result);
+}
+
+test "ServerFinal should deserialize correctly" {
+    var alloc = std.testing.allocator;
+
+    var f = try ServerFinal.deserialize(alloc, "v=aG9saSA6KSEh");
+    defer f.deinit(alloc);
+
+    try std.testing.expectEqualDeep(ServerFinal{ .signature = "holi :)!!" }, f);
+
+    var err = try ServerFinal.deserialize(alloc, "e=other-error");
+    defer err.deinit(alloc);
+
+    try std.testing.expectEqualDeep(ServerFinal{ .err = error.@"other-error" }, err);
 }

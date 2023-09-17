@@ -104,10 +104,10 @@ pub fn Client(comptime Hash: type) type {
             defer server_final.deinit(self.alloc);
 
             switch (server_final) {
-                .err => @panic("error!"),
+                .err => |e| return e,
                 .signature => |s| {
                     if (!std.mem.eql(u8, s, &self.server_signature)) {
-                        @panic("invalid signature!");
+                        return error.ServerVerificationFailed;
                     }
                 },
             }
