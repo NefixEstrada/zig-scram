@@ -4,6 +4,28 @@ const common = @import("common.zig");
 const client = @import("client.zig");
 const server = @import("server.zig");
 
+pub const Client = client.Client;
+pub const Server = server.Server;
+
+pub const Credentials = server.Credentials;
+pub const CredentialsLookup = server.CredentialsLookup;
+
+pub const ClientSha1 = Client(std.crypto.hash.Sha1);
+pub const ClientSha256 = Client(std.crypto.hash.sha2.Sha256);
+pub const ClientSha512 = Client(std.crypto.hash.sha3.Sha3_512);
+
+pub fn ServerSha1(comptime lookup: CredentialsLookup) type {
+    return Server(std.crypto.hash.Sha1, lookup);
+}
+
+pub fn ServerSha256(comptime lookup: CredentialsLookup) type {
+    return Server(std.crypto.hash.sha2.Sha256, lookup);
+}
+
+pub fn ServerSha512(comptime lookup: CredentialsLookup) type {
+    return Server(std.crypto.hash.sha3.Sha3_512, lookup);
+}
+
 test "Test both client and server" {
     var alloc = std.testing.allocator;
 
@@ -18,10 +40,10 @@ test "Test both client and server" {
         }
     }.creds;
 
-    var s = try server.ServerSha1(credsLookup).init(alloc, "3rfcNHYJY1ZVvWVs7j");
+    var s = try ServerSha1(credsLookup).init(alloc, "3rfcNHYJY1ZVvWVs7j");
     defer s.deinit();
 
-    var c = try client.ClientSha1.init(alloc, "user", "pencil", "fyko+d2lbbFgONRv9qkxdawL");
+    var c = try ClientSha1.init(alloc, "user", "pencil", "fyko+d2lbbFgONRv9qkxdawL");
     defer c.deinit();
 
     const client_first = try c.clientFirst();

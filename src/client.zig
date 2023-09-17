@@ -3,10 +3,6 @@ const gs2 = @import("gs2.zig");
 const common = @import("common.zig");
 const server = @import("server.zig");
 
-pub const ClientSha1 = Client(std.crypto.hash.Sha1);
-pub const ClientSha256 = Client(std.crypto.hash.sha2.Sha256);
-pub const ClientSha512 = Client(std.crypto.hash.sha3.Sha3_512);
-
 pub fn Client(comptime Hash: type) type {
     const Hmac = std.crypto.auth.hmac.Hmac(Hash);
 
@@ -118,7 +114,7 @@ pub fn Client(comptime Hash: type) type {
 test "Client should send the client first message correctly" {
     var allocator = std.testing.allocator;
 
-    var c = try ClientSha256.init(allocator, "nefix", "s3cr3t", "hello :)");
+    var c = try Client(std.crypto.hash.sha2.Sha256).init(allocator, "nefix", "s3cr3t", "hello :)");
     defer c.deinit();
 
     const client_first = try c.clientFirst();
@@ -131,7 +127,7 @@ test "Client should send the client final message correctly" {
     var allocator = std.testing.allocator;
     {
         // Taken from https://datatracker.ietf.org/doc/html/rfc5802
-        var c = try ClientSha1.init(allocator, "user", "pencil", "fyko+d2lbbFgONRv9qkxdawL");
+        var c = try Client(std.crypto.hash.Sha1).init(allocator, "user", "pencil", "fyko+d2lbbFgONRv9qkxdawL");
         defer c.deinit();
 
         const first = try c.clientFirst();
@@ -145,7 +141,7 @@ test "Client should send the client final message correctly" {
 
     {
         // Taken from https://github.com/star-tek-mb/pgz/blob/master/src/auth.zig
-        var c = try ClientSha256.init(allocator, "", "foobar", "9IZ2O01zb9IgiIZ1WJ/zgpJB");
+        var c = try Client(std.crypto.hash.sha2.Sha256).init(allocator, "", "foobar", "9IZ2O01zb9IgiIZ1WJ/zgpJB");
         defer c.deinit();
 
         const first = try c.clientFirst();

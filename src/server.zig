@@ -12,18 +12,6 @@ pub const Credentials = struct {
     server_key: []const u8,
 };
 
-pub fn ServerSha1(comptime lookup: CredentialsLookup) type {
-    return Server(std.crypto.hash.Sha1, lookup);
-}
-
-pub fn ServerSha256(comptime lookup: CredentialsLookup) type {
-    return Server(std.crypto.hash.sha2.Sha256, lookup);
-}
-
-pub fn ServerSha512(comptime lookup: CredentialsLookup) type {
-    return Server(std.crypto.hash.sha3.Sha3_512, lookup);
-}
-
 pub fn Server(comptime Hash: type, comptime lookup: CredentialsLookup) type {
     const Hmac = std.crypto.auth.hmac.Hmac(Hash);
 
@@ -144,7 +132,7 @@ test "Server should send the server first message correctly" {
         }
     }.creds;
 
-    var s = try ServerSha1(credsLookup).init(allocator, "c12b3985bbd4a8e6f814b422ab766573");
+    var s = try Server(std.crypto.hash.Sha1, credsLookup).init(allocator, "c12b3985bbd4a8e6f814b422ab766573");
     defer s.deinit();
 
     const result = try s.serverFirst("n,,n=romeo,r=6d442b5d9e51a740f369e3dcecf3178e");
@@ -167,7 +155,7 @@ test "Server should send the server final message correctly" {
         }
     }.creds;
 
-    var s = try ServerSha1(credsLookup).init(allocator, "3rfcNHYJY1ZVvWVs7j");
+    var s = try Server(std.crypto.hash.Sha1, credsLookup).init(allocator, "3rfcNHYJY1ZVvWVs7j");
     defer s.deinit();
 
     // Taken from https://wiki.xmpp.org/web/SASL_Authentication_and_SCRAM
