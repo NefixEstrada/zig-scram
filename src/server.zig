@@ -47,7 +47,7 @@ pub fn Server(comptime Hash: type, comptime lookup: CredentialsLookup) type {
 
             self.credentials = try lookup(client_first.username);
 
-            var salt = try self.alloc.alloc(u8, base64.calcSize(self.credentials.?.salt.len));
+            const salt = try self.alloc.alloc(u8, base64.calcSize(self.credentials.?.salt.len));
             defer self.alloc.free(salt);
             _ = base64.encode(salt, self.credentials.?.salt);
 
@@ -77,7 +77,7 @@ pub fn Server(comptime Hash: type, comptime lookup: CredentialsLookup) type {
             const without_proof = try client_final.serializeWithoutProof(self.alloc);
             defer self.alloc.free(without_proof);
 
-            var auth_message = try std.mem.concat(self.alloc, u8, &.{
+            const auth_message = try std.mem.concat(self.alloc, u8, &.{
                 self.client_first_bare.?,
                 ",",
                 self.server_first.?,
@@ -222,7 +222,7 @@ pub const ServerFirst = struct {
         const salt = blk: {
             const raw_salt = common.deserializePart("s", part.?) catch return error.ServerFirstInvalid;
 
-            var s = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(raw_salt));
+            const s = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(raw_salt));
             try base64Decoder.decode(s, raw_salt);
 
             break :blk s;
@@ -265,7 +265,7 @@ test "ServerFirst should serialize correctly" {
 }
 
 test "ServerFirst should deserialize correctly" {
-    var alloc = std.testing.allocator;
+    const alloc = std.testing.allocator;
 
     const expected = ServerFirst{
         .nonce = "9IZ2O01zb9IgiIZ1WJ/zgpJBjx/oIRLs02gGSHcw1KEty3eY",
@@ -298,7 +298,7 @@ pub fn stringToServerError(err: []const u8) ?ServerError {
     const kvs = comptime build_kvs: {
         const ErrorKV = struct { []const u8, ServerError };
         var kvs_array: [@typeInfo(ServerError).ErrorSet.?.len]ErrorKV = undefined;
-        inline for (@typeInfo(ServerError).ErrorSet.?, 0..) |errField, i| {
+        for (@typeInfo(ServerError).ErrorSet.?, 0..) |errField, i| {
             kvs_array[i] = .{ errField.name, @field(ServerError, errField.name) };
         }
         break :build_kvs kvs_array[0..];
@@ -331,7 +331,7 @@ pub const ServerFinal = union(enum) {
                 });
             },
             .signature => |s| {
-                var signature = try alloc.alloc(u8, base64Encoder.calcSize(s.len));
+                const signature = try alloc.alloc(u8, base64Encoder.calcSize(s.len));
                 defer alloc.free(signature);
                 _ = base64Encoder.encode(signature, s);
 
@@ -347,7 +347,7 @@ pub const ServerFinal = union(enum) {
         var parts = std.mem.splitScalar(u8, server_final, ',');
 
         // Error
-        var part: []const u8 = parts.first();
+        const part: []const u8 = parts.first();
         const err = common.deserializeOptionalPart("e", part) catch return error.ServerFinalInvalid;
         if (err) |e| return ServerFinal{
             .err = stringToServerError(e) orelse return error.ServerFinalUnknownError,
@@ -355,7 +355,7 @@ pub const ServerFinal = union(enum) {
 
         // Signature
         const raw_signature = common.deserializePart("v", part) catch return error.ServerFinalInvalid;
-        var signature = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(raw_signature));
+        const signature = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(raw_signature));
         _ = try base64Decoder.decode(signature, raw_signature);
         return ServerFinal{
             .signature = signature,
@@ -380,7 +380,7 @@ test "ServerFinal should serialize correctly" {
 }
 
 test "ServerFinal should deserialize correctly" {
-    var alloc = std.testing.allocator;
+    const alloc = std.testing.allocator;
 
     var f = try ServerFinal.deserialize(alloc, "v=aG9saSA6KSEh");
     defer f.deinit(alloc);

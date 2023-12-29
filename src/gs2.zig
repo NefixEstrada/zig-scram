@@ -69,7 +69,7 @@ test "Header should serialize correctly" {
 
 test "Header should deserialize correctly" {
     var parts = std.mem.splitScalar(u8, "n,a=hello,", ',');
-    var header = try Header.deserialize(&parts);
+    const header = try Header.deserialize(&parts);
 
     try std.testing.expectEqualDeep(Header{
         .cbind_flag = .{ .N = {} },

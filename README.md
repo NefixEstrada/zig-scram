@@ -14,6 +14,7 @@ Based on [https://github.com/xdg-go/scram](https://github.com/xdg-go/scram) and 
 - State machine + step
 - Refactor everything with allocators on the functions, not on the structs
 - Make the nonce generator functions, not arguments when calling the functions
+- Create the Error type
 - Allocator less usage:
 
 ```zig

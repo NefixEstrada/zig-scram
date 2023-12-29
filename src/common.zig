@@ -20,12 +20,12 @@ pub fn deserializeOptionalPart(identifier: []const u8, msg: ?[]const u8) !?[]con
 
 const base64 = std.base64.standard.Encoder;
 pub fn defaultNonceGenerator(alloc: std.mem.Allocator) ![]const u8 {
-    var raw = try alloc.alloc(u8, 24);
+    const raw = try alloc.alloc(u8, 24);
     defer alloc.free(raw);
 
     std.crypto.random.bytes(raw);
 
-    var nonce = try alloc.alloc(u8, base64.calcSize(raw.len));
+    const nonce = try alloc.alloc(u8, base64.calcSize(raw.len));
     _ = base64.encode(nonce, raw);
     return nonce;
 }

@@ -54,10 +54,10 @@ pub fn Client(comptime Hash: type) type {
                 .nonce = server_first.nonce,
                 .proof = undefined,
             };
-            var without_proof = try c.serializeWithoutProof(self.alloc);
+            const without_proof = try c.serializeWithoutProof(self.alloc);
             defer self.alloc.free(without_proof);
 
-            var salted_password = try self.alloc.alloc(u8, Hash.digest_length);
+            const salted_password = try self.alloc.alloc(u8, Hash.digest_length);
             defer self.alloc.free(salted_password);
 
             try std.crypto.pwhash.pbkdf2(salted_password, self.password, server_first.salt, server_first.iteration_count, Hmac);
@@ -68,7 +68,7 @@ pub fn Client(comptime Hash: type) type {
             var stored_key: [Hash.digest_length]u8 = undefined;
             Hash.hash(&client_key, &stored_key, .{});
 
-            var auth_message = try std.mem.concat(self.alloc, u8, &.{
+            const auth_message = try std.mem.concat(self.alloc, u8, &.{
                 self.client_first_bare.?,
                 ",",
                 msg,
@@ -247,7 +247,7 @@ test "ClientFirst should serialize correctly" {
 test "ClientFirst should deserialize correctly" {
     const client_first = "n,,n=,r=9IZ2O01zb9IgiIZ1WJ/zgpJBjx/oIRLs02gGSHcw1KEty3eY";
 
-    var c = try ClientFirst.deserialize(client_first);
+    const c = try ClientFirst.deserialize(client_first);
     try std.testing.expectEqualDeep(ClientFirst{
         .header = .{ .cbind_flag = .{ .N = {} } },
         .username = "",
@@ -267,7 +267,7 @@ pub const ClientFinal = struct {
     _raw_header: ?[]const u8 = null,
 
     pub fn serialize(self: *ClientFinal, alloc: std.mem.Allocator, without_proof: []const u8) ![]const u8 {
-        var proof = try alloc.alloc(u8, base64Encoder.calcSize(self.proof.len));
+        const proof = try alloc.alloc(u8, base64Encoder.calcSize(self.proof.len));
         defer alloc.free(proof);
         _ = base64Encoder.encode(proof, self.proof);
 
@@ -288,7 +288,7 @@ pub const ClientFinal = struct {
         const header = try self.header.serialize(alloc);
         defer alloc.free(header);
 
-        var channel_binding = try alloc.alloc(u8, base64Encoder.calcSize(header.len));
+        const channel_binding = try alloc.alloc(u8, base64Encoder.calcSize(header.len));
         defer alloc.free(channel_binding);
         _ = base64Encoder.encode(channel_binding, header);
 
@@ -310,7 +310,7 @@ pub const ClientFinal = struct {
         if (part == null) return error.ClientFinalInvalid;
         const channel_binding = common.deserializePart("c", part.?) catch return error.ClientFirstInvalid;
 
-        var raw_header = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(channel_binding));
+        const raw_header = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(channel_binding));
         try base64Decoder.decode(raw_header, channel_binding);
 
         var raw_header_split = std.mem.splitScalar(u8, raw_header, ',');
@@ -327,7 +327,7 @@ pub const ClientFinal = struct {
         if (part == null) return error.ClientFinalInvalid;
         const raw_proof = common.deserializePart("p", part.?) catch return error.ClientFirstInvalid;
 
-        var proof = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(raw_proof));
+        const proof = try alloc.alloc(u8, try base64Decoder.calcSizeForSlice(raw_proof));
         try base64Decoder.decode(proof, raw_proof);
 
         return ClientFinal{
@@ -358,7 +358,7 @@ test "ClientFinal should be serialized correctly" {
 }
 
 test "ClientFinal should be deserialized correctly" {
-    var alloc = std.testing.allocator;
+    const alloc = std.testing.allocator;
 
     var c = try ClientFinal.deserialize(alloc, "c=biws,r=6d442b5d9e51a740f369e3dcecf3178ec12b3985bbd4a8e6f814b422ab766573,p=yqm72YlfshENjPR1XxanpnHQP8o=");
     defer c.deinit(alloc);

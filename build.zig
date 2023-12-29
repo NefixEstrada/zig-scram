@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
 
     // Declare the scram module
-    var scram_module = b.createModule(.{
+    const scram_module = b.createModule(.{
         .source_file = .{ .path = "src/main.zig" },
     });
     try b.modules.put(b.dupe("scram"), scram_module);
